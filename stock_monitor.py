@@ -26,9 +26,6 @@ CHAT_ID = os.getenv("CHAT_ID")
 PORTFOLIO_TICKERS = ["NST.AX", "TLX.AX", "SUM.NZ", "FRW.NZ", "MCY.NZ", "WTC.AX", "CSL.AX", "EBO.NZ", "PME.AX"]
 SHARES = [830, 1268, 2493, 877, 2302, 459, 171, 819, 200]
 
-GOLD_OZ = 2.51
-SILVER_OZ = 149
-
 XRO_SOLD_SHARES = 246
 XRO_SELL_PRICE_AUD = 79.27
 # ====================================================
