@@ -7,6 +7,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from openai import OpenAI
 import os
+import requests
+from bs4 import BeautifulSoup
 
 print("✅ Script started successfully on GitHub Actions")
 
@@ -47,9 +49,24 @@ TOP_MARKET = list(dict.fromkeys(TOP_ASX + TOP_NZX))
 client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
 def get_commodities_and_fx():
-    print("🔄 Fetching Gold, Silver & FX...")
-    gold_nzd = 7480.0
-    silver_nzd = 117.0
+    print("🔄 Fetching Gold & Silver from gogold.co.nz...")
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        response = requests.get("https://gogold.co.nz/pricing/", headers=headers, timeout=15)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        text = soup.get_text()
+
+        import re
+        gold_match = re.search(r'Gold[^0-9]*?(\d{1,5}(?:\.\d{1,2})?)', text, re.IGNORECASE)
+        silver_match = re.search(r'Silver[^0-9]*?(\d{1,5}(?:\.\d{1,2})?)', text, re.IGNORECASE)
+
+        gold_nzd = float(gold_match.group(1)) if gold_match else 7480.0
+        silver_nzd = float(silver_match.group(1)) if silver_match else 117.0
+    except Exception as e:
+        print(f"⚠️ Scraping failed: {e}. Using fallback prices.")
+        gold_nzd = 7480.0
+        silver_nzd = 117.0
+
     aud_nzd = 1.215
     print(f"✅ Gold: {gold_nzd} NZD/oz | Silver: {silver_nzd} NZD/oz")
     return {'Gold_NZD': gold_nzd, 'Silver_NZD': silver_nzd, 'AUD_to_NZD': aud_nzd}
@@ -193,7 +210,6 @@ def send_telegram(message):
 
 def main():
     print("🚀 Starting Ultra Advanced Grok Institutional Monitor v3.6...")
-
     comm_fx = get_commodities_and_fx()
     portfolio_df, total_value, comm_fx = get_portfolio_data(comm_fx)
     announcements = get_nzx_announcements()
