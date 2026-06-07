@@ -11,7 +11,7 @@ import requests
 from bs4 import BeautifulSoup
 import re
 
-print("🚀 Starting Ultra Advanced Grok Institutional Monitor v4.1 (Local)...")
+print("✅ Script started successfully on GitHub Actions")
 
 # ===================== YOUR KEYS (from GitHub Secrets) =====================
 XAI_API_KEY = os.getenv("XAI_API_KEY")
@@ -22,12 +22,9 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 # ====================================================
 
-# ===================== UPDATED PORTFOLIO =====================
+# ===================== UPDATED PORTFOLIO (No Gold/Silver) =====================
 PORTFOLIO_TICKERS = ["NST.AX", "TLX.AX", "SUM.NZ", "FRW.NZ", "MCY.NZ", "WTC.AX", "CSL.AX", "EBO.NZ", "PME.AX"]
 SHARES = [830, 1268, 2493, 877, 2302, 459, 171, 819, 200]
-
-GOLD_OZ = 2.51
-SILVER_OZ = 149
 
 XRO_SOLD_SHARES = 246
 XRO_SELL_PRICE_AUD = 79.27
@@ -54,7 +51,6 @@ def get_commodities_and_fx():
     gold_nzd = 7480.0
     silver_nzd = 117.0
     try:
-        # Primary: yfinance
         gold_usd = yf.Ticker("GC=F").info.get('regularMarketPrice') or yf.Ticker("GC=F").history(period="1d")['Close'].iloc[-1]
         silver_usd = yf.Ticker("SI=F").info.get('regularMarketPrice') or yf.Ticker("SI=F").history(period="1d")['Close'].iloc[-1]
         aud_nzd = yf.Ticker("AUDNZD=X").info.get('regularMarketPrice') or 1.215
@@ -63,20 +59,7 @@ def get_commodities_and_fx():
         silver_nzd = round(silver_usd * aud_nzd, 2)
         print("✅ Fetched live prices via yfinance")
     except:
-        try:
-            # Backup scrape
-            headers = {"User-Agent": "Mozilla/5.0"}
-            response = requests.get("https://gogold.co.nz/pricing/", headers=headers, timeout=15)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            text = soup.get_text()
-            gold_match = re.search(r'Gold[^0-9]*?(\d{1,5}(?:\.\d{1,2})?)', text, re.IGNORECASE | re.DOTALL)
-            silver_match = re.search(r'Silver[^0-9]*?(\d{1,5}(?:\.\d{1,2})?)', text, re.IGNORECASE | re.DOTALL)
-            if gold_match:
-                gold_nzd = float(gold_match.group(1))
-            if silver_match:
-                silver_nzd = float(silver_match.group(1))
-        except:
-            print("⚠️ Using fallback prices.")
+        print("⚠️ Using fallback prices.")
 
     print(f"✅ Gold: {gold_nzd} NZD/oz | Silver: {silver_nzd} NZD/oz")
     return {'Gold_NZD': gold_nzd, 'Silver_NZD': silver_nzd, 'AUD_to_NZD': 1.215}
@@ -125,12 +108,6 @@ def get_portfolio_data(comm_fx):
             })
         except:
             data.append({'Ticker': ticker, 'Shares': SHARES[i], 'Price (NZD)': "N/A", 'Change %': "N/A", 'Value (NZD)': "N/A"})
-
-    # Metals
-    gold_value = round(GOLD_OZ * comm_fx['Gold_NZD'], 2)
-    silver_value = round(SILVER_OZ * comm_fx['Silver_NZD'], 2)
-    data.append({'Ticker': 'GOLD', 'Shares': GOLD_OZ, 'Price (NZD)': comm_fx['Gold_NZD'], 'Change %': "N/A", 'Value (NZD)': gold_value})
-    data.append({'Ticker': 'SILVER', 'Shares': SILVER_OZ, 'Price (NZD)': comm_fx['Silver_NZD'], 'Change %': "N/A", 'Value (NZD)': silver_value})
 
     # Cash from XRO sale
     xro_cash_nzd = round(XRO_SOLD_SHARES * XRO_SELL_PRICE_AUD * aud_to_nzd, 2)
@@ -204,7 +181,7 @@ Gold: {comm_fx['Gold_NZD']} NZD/oz | Silver: {comm_fx['Silver_NZD']} NZD/oz | 1 
 **Top Movers:**
 {movers}
 
-Deliver a high-conviction briefing with portfolio review, market regime, 7-day outlook, Buy/Sell/Hold recommendations, and risk management.
+Deliver a high-conviction briefing with portfolio review, market regime, 7-day outlook, Buy/Sell/Hold recommendations from top 50, and risk management.
 End with 'This is not financial advice.'"""
 
     response = client.chat.completions.create(
