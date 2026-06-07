@@ -8,15 +8,15 @@ from email.mime.multipart import MIMEMultipart
 from openai import OpenAI
 import os
 
-print("✅ Script started successfully on GitHub")
+print("✅ Script started successfully on GitHub Actions")
 
-# ===================== YOUR KEYS =====================
-XAI_API_KEY = os.getenv("xai-m87kSm3RRahN6DVxxBoHw3qSd64qxELzwW9jApUl8heor7fMnB5p1rIMthihCohVC5wkJ0ihXzkHwMQu")
-GMAIL_EMAIL = os.getenv("maximuslucius01@gmail.com")
-GMAIL_APP_PASSWORD = os.getenv(""kvku biww qozn jcfo")
-RECIPIENT_EMAIL = os.getenv("lukassouthey@outlook.co.nz")
-TELEGRAM_TOKEN = os.getenv("8879289893:AAEMYMdY5E6vcQB-sDG-lt2EwSlovZYorDY")
-CHAT_ID = os.getenv("126949119")
+# ===================== YOUR KEYS (Loaded from GitHub Secrets) =====================
+XAI_API_KEY = os.getenv("XAI_API_KEY")
+GMAIL_EMAIL = os.getenv("GMAIL_EMAIL")
+GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
+RECIPIENT_EMAIL = os.getenv("RECIPIENT_EMAIL")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
 # ====================================================
 
 # ===================== PORTFOLIO =====================
@@ -30,7 +30,7 @@ XRO_SOLD_SHARES = 246
 XRO_SELL_PRICE_AUD = 79.27
 # ====================================================
 
-# (TOP_ASX = ["BHP.AX", "CBA.AX", "NEM.AX", "WBC.AX", "ANZ.AX", "MQG.AX", "WES.AX", "RIO.AX", "FMG.AX", "GMG.AX",
+TOP_ASX = ["BHP.AX", "CBA.AX", "NEM.AX", "WBC.AX", "ANZ.AX", "MQG.AX", "WES.AX", "RIO.AX", "FMG.AX", "GMG.AX",
            "WDS.AX", "TLS.AX", "TCL.AX", "CSL.AX", "WOW.AX", "RMD.AX", "QBE.AX", "ALL.AX", "COL.AX", "NST.AX",
            "STO.AX", "BXB.AX", "REA.AX", "S32.AX", "CPU.AX", "SUN.AX", "ORG.AX", "IAG.AX", "PME.AX", "SGH.AX",
            "SOL.AX", "BSL.AX", "QAN.AX", "APA.AX", "WTC.AX", "MIN.AX", "MPL.AX", "ALQ.AX", "TLC.AX", "NXT.AX",
@@ -48,24 +48,15 @@ client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
 def get_commodities_and_fx():
     print("🔄 Fetching Gold, Silver & FX...")
-    try:
-        aud_nzd = yf.Ticker("AUDNZD=X").info.get('regularMarketPrice') or 1.215
-    except:
-        aud_nzd = 1.215
-
     gold_nzd = 7480.0
     silver_nzd = 117.0
-
+    aud_nzd = 1.215
     print(f"✅ Gold: {gold_nzd} NZD/oz | Silver: {silver_nzd} NZD/oz")
-    return {'Gold_NZD': gold_nzd, 'Silver_NZD': silver_nzd, 'AUD_to_NZD': round(aud_nzd, 4)}
+    return {'Gold_NZD': gold_nzd, 'Silver_NZD': silver_nzd, 'AUD_to_NZD': aud_nzd}
 
 def get_portfolio_data(comm_fx):
     data = []
     aud_to_nzd = comm_fx['AUD_to_NZD']
-
-    # Calculate cash from XRO sale
-    xro_cash_aud = XRO_SOLD_SHARES * XRO_SELL_PRICE_AUD
-    xro_cash_nzd = round(xro_cash_aud * aud_to_nzd, 2)
 
     for i, ticker in enumerate(PORTFOLIO_TICKERS):
         try:
@@ -93,7 +84,8 @@ def get_portfolio_data(comm_fx):
     data.append({'Ticker': 'GOLD', 'Shares': GOLD_OZ, 'Price (NZD)': comm_fx['Gold_NZD'], 'Change %': "N/A", 'Value (NZD)': gold_value})
     data.append({'Ticker': 'SILVER', 'Shares': SILVER_OZ, 'Price (NZD)': comm_fx['Silver_NZD'], 'Change %': "N/A", 'Value (NZD)': silver_value})
 
-    # Cash from sale
+    # Cash from XRO sale
+    xro_cash_nzd = round(XRO_SOLD_SHARES * XRO_SELL_PRICE_AUD * aud_to_nzd, 2)
     data.append({'Ticker': 'CASH (NZD)', 'Shares': '-', 'Price (NZD)': xro_cash_nzd, 'Change %': "N/A", 'Value (NZD)': xro_cash_nzd})
 
     df = pd.DataFrame(data)
@@ -106,8 +98,6 @@ def get_portfolio_data(comm_fx):
     df = pd.concat([df, total_row], ignore_index=True)
 
     return df, total_value, comm_fx
-
-# [All other functions remain the same as the previous advanced version]
 
 def get_news_feed(url, limit=6):
     try:
@@ -173,7 +163,7 @@ End with 'This is not financial advice.'"""
         model="grok-4",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.6,
-        max_tokens=1700
+        max_tokens=1600
     )
     return response.choices[0].message.content
 
