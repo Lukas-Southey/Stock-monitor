@@ -9,6 +9,7 @@ from openai import OpenAI
 import os
 import requests
 from bs4 import BeautifulSoup
+import re
 
 print("✅ Script started successfully on GitHub Actions")
 
@@ -50,22 +51,23 @@ client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 
 def get_commodities_and_fx():
     print("🔄 Fetching Gold & Silver from gogold.co.nz...")
+    gold_nzd = 7480.0
+    silver_nzd = 117.0
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get("https://gogold.co.nz/pricing/", headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
         text = soup.get_text()
 
-        import re
         gold_match = re.search(r'Gold[^0-9]*?(\d{1,5}(?:\.\d{1,2})?)', text, re.IGNORECASE | re.DOTALL)
         silver_match = re.search(r'Silver[^0-9]*?(\d{1,5}(?:\.\d{1,2})?)', text, re.IGNORECASE | re.DOTALL)
 
-        gold_nzd = float(gold_match.group(1)) if gold_match else 7480.0
-        silver_nzd = float(silver_match.group(1)) if silver_match else 117.0
+        if gold_match:
+            gold_nzd = float(gold_match.group(1))
+        if silver_match:
+            silver_nzd = float(silver_match.group(1))
     except Exception as e:
         print(f"⚠️ Scraping failed: {e}. Using fallback.")
-        gold_nzd = 7480.0
-        silver_nzd = 117.0
 
     aud_nzd = 1.215
     print(f"✅ Gold: {gold_nzd} NZD/oz | Silver: {silver_nzd} NZD/oz")
@@ -78,7 +80,7 @@ def get_top_movers():
         try:
             hist = yf.Ticker(t).history(period="1mo")
             if len(hist) >= 5:
-                week_change = ((hist['Close'].iloc[-1] / hist['Close'].iloc[-5]) - 1) * 100 if len(hist) >= 5 else 0
+                week_change = ((hist['Close'].iloc[-1] / hist['Close'].iloc[-5]) - 1) * 100
                 month_change = ((hist['Close'].iloc[-1] / hist['Close'].iloc[0]) - 1) * 100
                 movers.append((t, round(week_change, 2), round(month_change, 2)))
         except:
@@ -194,13 +196,7 @@ Gold: {comm_fx['Gold_NZD']} NZD/oz | Silver: {comm_fx['Silver_NZD']} NZD/oz | 1 
 **Top Movers:**
 {movers}
 
-Deliver a high-conviction briefing:
-1. Portfolio Review & Risk
-2. Market Regime
-3. 7-Day Tactical Outlook
-4. High-Conviction Buy/Sell/Hold Recommendations (from top 50) with reasoning
-5. Risk Management & Next Moves
-
+Deliver a high-conviction briefing with portfolio review, market regime, 7-day outlook, Buy/Sell/Hold recommendations from top 50, and risk management.
 End with 'This is not financial advice.'"""
 
     response = client.chat.completions.create(
@@ -236,7 +232,7 @@ def send_telegram(message):
         pass
 
 def main():
-    print("🚀 Starting Ultra Advanced Grok Institutional Monitor v3.7...")
+    print("🚀 Starting Ultra Advanced Grok Institutional Monitor v3.8...")
 
     comm_fx = get_commodities_and_fx()
     portfolio_df, total_value, comm_fx = get_portfolio_data(comm_fx)
