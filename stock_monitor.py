@@ -51,25 +51,46 @@ client = OpenAI(api_key=XAI_API_KEY, base_url="https://api.x.ai/v1")
 def get_commodities_and_fx():
     print("🔄 Fetching Gold & Silver from gogold.co.nz...")
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get("https://gogold.co.nz/pricing/", headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
         text = soup.get_text()
 
         import re
-        gold_match = re.search(r'Gold[^0-9]*?(\d{1,5}(?:\.\d{1,2})?)', text, re.IGNORECASE)
-        silver_match = re.search(r'Silver[^0-9]*?(\d{1,5}(?:\.\d{1,2})?)', text, re.IGNORECASE)
+        gold_match = re.search(r'Gold[^0-9]*?(\d{1,5}(?:\.\d{1,2})?)', text, re.IGNORECASE | re.DOTALL)
+        silver_match = re.search(r'Silver[^0-9]*?(\d{1,5}(?:\.\d{1,2})?)', text, re.IGNORECASE | re.DOTALL)
 
         gold_nzd = float(gold_match.group(1)) if gold_match else 7480.0
         silver_nzd = float(silver_match.group(1)) if silver_match else 117.0
     except Exception as e:
-        print(f"⚠️ Scraping failed: {e}. Using fallback prices.")
+        print(f"⚠️ Scraping failed: {e}. Using fallback.")
         gold_nzd = 7480.0
         silver_nzd = 117.0
 
     aud_nzd = 1.215
     print(f"✅ Gold: {gold_nzd} NZD/oz | Silver: {silver_nzd} NZD/oz")
     return {'Gold_NZD': gold_nzd, 'Silver_NZD': silver_nzd, 'AUD_to_NZD': aud_nzd}
+
+def get_top_movers():
+    print("🔄 Calculating top movers...")
+    movers = []
+    for t in TOP_MARKET[:80]:
+        try:
+            hist = yf.Ticker(t).history(period="1mo")
+            if len(hist) >= 5:
+                week_change = ((hist['Close'].iloc[-1] / hist['Close'].iloc[-5]) - 1) * 100 if len(hist) >= 5 else 0
+                month_change = ((hist['Close'].iloc[-1] / hist['Close'].iloc[0]) - 1) * 100
+                movers.append((t, round(week_change, 2), round(month_change, 2)))
+        except:
+            pass
+
+    week_top = sorted(movers, key=lambda x: x[1], reverse=True)[:10]
+    month_top = sorted(movers, key=lambda x: x[2], reverse=True)[:10]
+
+    week_str = "\n".join([f"{t}: {chg}% (7d)" for t, chg, _ in week_top])
+    month_str = "\n".join([f"{t}: {chg}% (30d)" for t, _, chg in month_top])
+
+    return f"**Top 10 Weekly Movers:**\n{week_str}\n\n**Top 10 Monthly Movers:**\n{month_str}"
 
 def get_portfolio_data(comm_fx):
     data = []
@@ -153,7 +174,7 @@ def get_market_overview():
             pass
     return "\n".join(overview) if overview else "Market data limited."
 
-def get_ai_analysis(portfolio_df, total_value, announcements, market_overview, news, comm_fx):
+def get_ai_analysis(portfolio_df, total_value, announcements, market_overview, news, movers, comm_fx):
     prompt = f"""You are a top institutional portfolio manager for NZX and ASX markets.
 
 Current date: {datetime.now().strftime('%d %b %Y %H:%M NZST')}
@@ -170,17 +191,23 @@ Gold: {comm_fx['Gold_NZD']} NZD/oz | Silver: {comm_fx['Silver_NZD']} NZD/oz | 1 
 **Latest Business News:**
 {news}
 
-**Recent NZX Announcements:**
-{announcements}
+**Top Movers:**
+{movers}
 
-Deliver a high-conviction briefing with portfolio review, market regime, 7-day outlook, Buy/Sell/Hold recommendations, and risk management.
+Deliver a high-conviction briefing:
+1. Portfolio Review & Risk
+2. Market Regime
+3. 7-Day Tactical Outlook
+4. High-Conviction Buy/Sell/Hold Recommendations (from top 50) with reasoning
+5. Risk Management & Next Moves
+
 End with 'This is not financial advice.'"""
 
     response = client.chat.completions.create(
         model="grok-4",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.6,
-        max_tokens=1600
+        max_tokens=1700
     )
     return response.choices[0].message.content
 
@@ -209,12 +236,14 @@ def send_telegram(message):
         pass
 
 def main():
-    print("🚀 Starting Ultra Advanced Grok Institutional Monitor v3.6...")
+    print("🚀 Starting Ultra Advanced Grok Institutional Monitor v3.7...")
+
     comm_fx = get_commodities_and_fx()
     portfolio_df, total_value, comm_fx = get_portfolio_data(comm_fx)
     announcements = get_nzx_announcements()
     market_overview = get_market_overview()
     business_news = get_business_news()
+    movers = get_top_movers()
 
     print("\n📊 Your Full Portfolio (All in NZD):")
     print(portfolio_df)
@@ -227,7 +256,7 @@ def main():
 
     print("\n📰 Fetching Latest Business News...")
     print("\n🤖 Generating Deep Institutional Analysis...")
-    analysis = get_ai_analysis(portfolio_df, total_value, announcements, market_overview, business_news, comm_fx)
+    analysis = get_ai_analysis(portfolio_df, total_value, announcements, market_overview, business_news, movers, comm_fx)
 
     report_time = datetime.now().strftime('%d %b %Y %H:%M')
     subject = f"📈 Grok Ultra Intelligence Report - {report_time}"
@@ -245,6 +274,9 @@ MARKET OVERVIEW:
 
 LATEST BUSINESS NEWS:
 {business_news}
+
+TOP MOVERS:
+{movers}
 
 NZX ANNOUNCEMENTS:
 {announcements}
