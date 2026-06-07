@@ -8,6 +8,8 @@ on:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true   # Silences the warning
 
     steps:
       - name: Checkout code
@@ -31,4 +33,9 @@ jobs:
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        run: python stock_monitor.py
+        run: |
+          python stock_monitor.py 2>&1 | tee run.log
+
+      - name: Show Run Log
+        if: always()
+        run: cat run.log || echo "No log file generated"
