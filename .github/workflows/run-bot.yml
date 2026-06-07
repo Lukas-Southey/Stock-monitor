@@ -1,4 +1,4 @@
-name: Stock Monitor - Hourly (Mon-Fri 6am-6pm NZST)
+name: Stock Monitor - Hourly (Mon-Fri)
 
 on:
   schedule:
