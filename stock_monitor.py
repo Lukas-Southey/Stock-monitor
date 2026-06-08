@@ -39,8 +39,8 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
 # Portfolio (update these when you buy/sell)
-PORTFOLIO_TICKERS: List[str] = ["PME.AX", "TLX.AX", "EBO.NZ", "FRW.NZ", "MCY.NZ", "WTC.AX", "CSL.AX"]
-SHARES: List[int] = [350, 1918, 619, 277, 1302, 459, 271]
+PORTFOLIO_TICKERS: List[str] = ["PME.AX", "TLX.AX", "EBO.NZ", "FRW.NZ", "MCY.NZ", "WTC.AX", "CSL.AX", "TNE.AX"]
+SHARES: List[int] = [350, 1918, 619, 277, 1302, 459, 271, 400]
 
 # XRO sale cash (already converted in previous runs)
 XRO_SOLD_SHARES = 246
