@@ -2,14 +2,15 @@ name: run-monitor
 
 on:
   schedule:
-    - cron: '0 18 * * 1-5'        # Runs every weekday at 6:00 AM NZST
-  workflow_dispatch:
+    # Runs every hour from 6:00 AM to 6:00 PM NZST (UTC+12), Monday to Friday
+    - cron: '0 18,19,20,21,22,23,0,1,2,3,4,5,6 * * 1-5'
+  workflow_dispatch:   # Allows manual trigger from GitHub
 
 jobs:
   run:
     runs-on: ubuntu-latest
     env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true     # ← This is the recommended fix
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
