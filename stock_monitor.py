@@ -22,7 +22,7 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 # ====================================================
 
-# ===================== UPDATED PORTFOLIO (No Gold/Silver) =====================
+# ===================== UPDATED PORTFOLIO =====================
 PORTFOLIO_TICKERS = ["NST.AX", "TLX.AX", "SUM.NZ", "FRW.NZ", "MCY.NZ", "WTC.AX", "CSL.AX", "EBO.NZ", "PME.AX"]
 SHARES = [830, 1268, 2493, 877, 2302, 459, 171, 819, 200]
 
@@ -96,7 +96,12 @@ def get_portfolio_data(comm_fx):
             price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose') or 0
             change_pct = info.get('regularMarketChangePercent') or 0
 
-            price_nzd = round(price * aud_to_nzd, 2) if not ticker.endswith('=F') else price
+            # FIXED: Convert ONLY .AX tickers to NZD. .NZ stay in NZD.
+            if ticker.endswith('.AX'):
+                price_nzd = round(price * aud_to_nzd, 2)
+            else:
+                price_nzd = round(price, 2)
+
             value_nzd = round(float(SHARES[i]) * price_nzd, 2)
 
             data.append({
@@ -109,7 +114,7 @@ def get_portfolio_data(comm_fx):
         except:
             data.append({'Ticker': ticker, 'Shares': SHARES[i], 'Price (NZD)': "N/A", 'Change %': "N/A", 'Value (NZD)': "N/A"})
 
-    # Cash from XRO sale
+    # Cash from XRO sale (converted to NZD)
     xro_cash_nzd = round(XRO_SOLD_SHARES * XRO_SELL_PRICE_AUD * aud_to_nzd, 2)
     data.append({'Ticker': 'CASH (NZD)', 'Shares': '-', 'Price (NZD)': xro_cash_nzd, 'Change %': "N/A", 'Value (NZD)': xro_cash_nzd})
 
@@ -124,6 +129,7 @@ def get_portfolio_data(comm_fx):
 
     return df, total_value, comm_fx
 
+# (The rest of the functions remain the same)
 def get_news_feed(url, limit=6):
     try:
         feed = feedparser.parse(url)
