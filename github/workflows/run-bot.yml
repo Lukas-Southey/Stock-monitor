@@ -1,29 +1,30 @@
-name: Daily Stock Monitor
+name: run-monitor
 
 on:
   schedule:
-    - cron: '0 8 * * *'     # 8:00 AM NZST every day
+    - cron: '0 18 * * 1-5'        # 6:00 AM NZST, Monday to Friday
   workflow_dispatch:
 
 jobs:
-  run-bot:
+  run:
     runs-on: ubuntu-latest
-
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install yfinance pandas feedparser openai requests
+          pip install yfinance pandas feedparser requests openai
 
-      - name: Run Stock Bot
+      - name: Run Grok Stock Monitor
         env:
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           GMAIL_EMAIL: ${{ secrets.GMAIL_EMAIL }}
