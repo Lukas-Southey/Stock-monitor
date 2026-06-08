@@ -2,16 +2,16 @@ name: run-monitor
 
 on:
   schedule:
-    - cron: '0 18 * * 1-5'        # 6:00 AM NZST, Monday to Friday
+    - cron: '0 18 * * 1-5'        # Runs every weekday at 6:00 AM NZST
   workflow_dispatch:
 
 jobs:
   run:
     runs-on: ubuntu-latest
     env:
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true     # ← This is the recommended fix
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Python
