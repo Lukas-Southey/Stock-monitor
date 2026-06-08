@@ -23,8 +23,8 @@ CHAT_ID = os.getenv("CHAT_ID")
 # ====================================================
 
 # ===================== UPDATED PORTFOLIO =====================
-PORTFOLIO_TICKERS = ["NST.AX", "TLX.AX", "SUM.NZ", "FRW.NZ", "MCY.NZ", "WTC.AX", "CSL.AX", "EBO.NZ", "PME.AX"]
-SHARES = [830, 1268, 2493, 877, 2302, 459, 171, 819, 200]
+PORTFOLIO_TICKERS = ["TLX.AX", "SUM.NZ", "FRW.NZ", "MCY.NZ", "WTC.AX", "CSL.AX", "EBO.NZ", "PME.AX"]
+SHARES = [1268, 2493, 627, 2302, 459, 271, 619, 350]
 
 XRO_SOLD_SHARES = 246
 XRO_SELL_PRICE_AUD = 79.27
