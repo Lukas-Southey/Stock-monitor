@@ -1,28 +1,15 @@
-name: Stock Monitor - Hourly (Mon-Fri 6am-6pm NZT)
+name: run-monitor
 
 on:
   schedule:
-    # Hourly from 6am to 6pm NZT (UTC+12) → runs at these UTC times
-    - cron: '0 18 * * 1-5'   # 6am NZT
-    - cron: '0 19 * * 1-5'   # 7am NZT
-    - cron: '0 20 * * 1-5'   # 8am NZT
-    - cron: '0 21 * * 1-5'   # 9am NZT
-    - cron: '0 22 * * 1-5'   # 10am NZT
-    - cron: '0 23 * * 1-5'   # 11am NZT
-    - cron: '0 0 * * 2-6'    # 12pm NZT
-    - cron: '0 1 * * 2-6'    # 1pm NZT
-    - cron: '0 2 * * 2-6'    # 2pm NZT
-    - cron: '0 3 * * 2-6'    # 3pm NZT
-    - cron: '0 4 * * 2-6'    # 4pm NZT
-    - cron: '0 5 * * 2-6'    # 5pm NZT
-    - cron: '0 6 * * 2-6'    # 6pm NZT
-
-  workflow_dispatch:  # Allows manual trigger
+    - cron: '0 18 * * 1-5'        # Runs at 6:00 AM NZST Mon–Fri (adjust if needed)
+  workflow_dispatch:              # Allows manual trigger
 
 jobs:
-  run-monitor:
+  run:
     runs-on: ubuntu-latest
-
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -30,13 +17,14 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: |
-          pip install yfinance pandas feedparser openai requests beautifulsoup4
+          python -m pip install --upgrade pip
+          pip install yfinance pandas feedparser requests openai
 
-      - name: Run Stock Monitor
+      - name: Run stock monitor
         env:
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           GMAIL_EMAIL: ${{ secrets.GMAIL_EMAIL }}
