@@ -39,16 +39,16 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
 # Portfolio (update these when you buy/sell)
-PORTFOLIO_TICKERS: List[str] = ["TLX.AX", "SUM.NZ", "FRW.NZ", "MCY.NZ", "WTC.AX", "CSL.AX", "EBO.NZ", "PME.AX"]
-SHARES: List[int] = [1268, 2493, 627, 2302, 459, 271, 619, 350]
+PORTFOLIO_TICKERS: List[str] = ["PME.AX", "TLX.AX", "EBO.NZ", "FRW.NZ", "MCY.NZ", "WTC.AX", "CSL.AX"]
+SHARES: List[int] = [350, 1918, 619, 277, 1302, 459, 271]
 
 # XRO sale cash (already converted in previous runs)
 XRO_SOLD_SHARES = 246
 XRO_SELL_PRICE_AUD = 79.27
 
 # Your physical precious metals (update via GitHub Secrets if you add/sell)
-GOLD_OZ = float(os.getenv("GOLD_OZ", "2.51"))
-SILVER_OZ = float(os.getenv("SILVER_OZ", "149.0"))
+GOLD_OZ = float(os.getenv("GOLD_OZ", "0"))
+SILVER_OZ = float(os.getenv("SILVER_OZ", "0"))
 CASH_EXTRA_NZD = float(os.getenv("CASH_EXTRA_NZD", "0.0"))  # Additional bank cash to include in grand total
 
 # Top lists for movers (capped for speed)
