@@ -25,8 +25,8 @@ CHAT_ID = "126949119"
 # ====================================================
 
 # ===================== PORTFOLIO =====================
-PORTFOLIO_TICKERS: List[str] = ["PME.AX", "TLX.AX", "EBO.NZ", "FRW.NZ", "TNE.AX", "WTC.AX", "CSL.AX", "S32.AX"]
-SHARES: List[int] = [350, 1918, 619, 277, 400, 459, 271, 1785]
+PORTFOLIO_TICKERS: List[str] = ["PME.AX", "TLX.AX", "EBO.NZ", "TNE.AX", "WTC.AX"]
+SHARES: List[int] = [410, 1918, 619, 400, 459]
 
 # ===================== CASH TRACKING =====================
 STARTING_CASH_NZD = 250000.0
