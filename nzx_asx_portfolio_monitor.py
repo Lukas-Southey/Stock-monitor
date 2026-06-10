@@ -1,23 +1,17 @@
 #!/usr/bin/env python3
 """
-NZX & ASX Portfolio Monitor & Report Generator
-SuperGrok Institutional-Style Daily Briefing (Data Layer) + Hourly Email Automation
+NZX & ASX Portfolio Monitor - SuperGrok Automated Report
+Hourly email + Telegram during trading hours (6am-6pm NZST, Mon-Fri)
 
-Features:
-- Fetches live prices via yfinance
-- Full NZD valuation + P&L table
-- Urgent alerts on big daily drops
-- Top movers (NZX + ASX) for 24h / 7d / 1mo
-- Recent news from holdings
-- Complete structured Markdown report matching the exact SuperGrok prompt
-- Trading hours guard (6am–6pm NZST, Mon–Fri)
-- Optional email delivery (perfect for GitHub Actions)
+This version supports:
+- Full data fetching (prices, movers, news, valuation)
+- Email via Gmail
+- Telegram notifications
+- Optional enhancement using xAI Grok API for high-quality analysis sections
 
-Run locally: python nzx_asx_portfolio_monitor.py
-For hourly email on trading days: Use the GitHub Actions workflow below.
-
-Requirements:
-    pip install yfinance pandas pytz
+SECURITY WARNING:
+Never commit real API keys, tokens or passwords to git.
+All sensitive values are loaded from environment variables / GitHub Secrets.
 """
 
 import yfinance as yf
@@ -27,14 +21,14 @@ import pytz
 import warnings
 import os
 import smtplib
+import requests
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 warnings.filterwarnings("ignore")
 
-
 # ============================================================
-# CONFIG - UPDATE YOUR HOLDINGS HERE
+# PORTFOLIO CONFIG (update as needed)
 # ============================================================
 PORTFOLIO = [
     {"ticker": "PME.AX", "shares": 410,  "buy_price": 165.54, "name": "Pro Medicus Ltd"},
@@ -44,31 +38,23 @@ PORTFOLIO = [
     {"ticker": "WTC.AX", "shares": 459,  "buy_price": 36.01,  "name": "WiseTech Global Ltd"},
 ]
 
-NZX_WATCHLIST = [
-    "IFT.NZ", "FPH.NZ", "EBO.NZ", "AIA.NZ", "MEL.NZ", "CEN.NZ",
-    "SPK.NZ", "WHS.NZ", "RYM.NZ", "VCT.NZ", "ANZ.NZ", "WBC.NZ",
-    "KMD.NZ", "SKT.NZ", "THL.NZ"
-]
-
-ASX_WATCHLIST = [
-    "BHP.AX", "CSL.AX", "RIO.AX", "CBA.AX", "WBC.AX", "ANZ.AX",
-    "NAB.AX", "FMG.AX", "WTC.AX", "TNE.AX", "PME.AX", "TLX.AX",
-    "JBH.AX", "WOW.AX", "COL.AX", "REA.AX", "SEK.AX", "CPU.AX",
-    "XRO.AX", "SQ2.AX"
-]
+NZX_WATCHLIST = ["IFT.NZ", "FPH.NZ", "EBO.NZ", "AIA.NZ", "MEL.NZ", "CEN.NZ", "SPK.NZ", "WHS.NZ", "RYM.NZ", "VCT.NZ"]
+ASX_WATCHLIST = ["BHP.AX", "CSL.AX", "RIO.AX", "CBA.AX", "WTC.AX", "TNE.AX", "PME.AX", "TLX.AX", "JBH.AX", "XRO.AX"]
 
 URGENT_THRESHOLD_PCT = -5.0
 
-
 # ============================================================
-# EMAIL & AUTOMATION CONFIG (GitHub Actions will override via env)
+# SECRETS - LOADED FROM ENVIRONMENT VARIABLES (GitHub Secrets)
 # ============================================================
-EMAIL_ENABLED = os.getenv("SEND_EMAIL", "false").lower() == "true"
-EMAIL_USER = os.getenv("EMAIL_USER", "")
-EMAIL_PASS = os.getenv("EMAIL_PASS", "")
-EMAIL_TO = os.getenv("EMAIL_TO", "")
-EMAIL_SUBJECT_PREFIX = "📈 NZX/ASX Portfolio Report"
-
+XAI_API_KEY       = os.getenv("XAI_API_KEY", "")
+TELEGRAM_TOKEN    = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID  = os.getenv("TELEGRAM_CHAT_ID", "")
+EMAIL_USER        = os.getenv("EMAIL_USER", "maximuslucius01@gmail.com")
+EMAIL_PASS        = os.getenv("EMAIL_PASS", "")
+EMAIL_TO          = os.getenv("EMAIL_TO", "lukassouthey@outlook.co.nz")
+SEND_EMAIL        = os.getenv("SEND_EMAIL", "true").lower() == "true"
+SEND_TELEGRAM     = os.getenv("SEND_TELEGRAM", "true").lower() == "true"
+USE_GROK_ANALYSIS = os.getenv("USE_GROK_ANALYSIS", "false").lower() == "true"
 
 # ============================================================
 # HELPER FUNCTIONS
@@ -79,336 +65,247 @@ def get_nz_timestamp():
         nz_tz = pytz.timezone('Pacific/Auckland')
         return datetime.now(nz_tz).strftime("%H:%M %d %b %Y NZST")
     except:
-        return datetime.now().strftime("%H:%M %d %b %Y") + " (local)"
-
+        return datetime.now().strftime("%H:%M %d %b %Y")
 
 def get_aud_nzd_rate():
     try:
         fx = yf.Ticker("AUDNZD=X")
-        rate = fx.fast_info.get('lastPrice') or fx.fast_info.get('regularMarketPrice', 1.105)
-        return round(float(rate), 4)
+        return round(float(fx.fast_info.get('lastPrice', 1.105)), 4)
     except:
         return 1.105
-
 
 def fetch_ticker_snapshot(ticker_symbol):
     try:
         t = yf.Ticker(ticker_symbol)
         info = getattr(t, 'fast_info', {}) or getattr(t, 'info', {})
         current_price = info.get('lastPrice') or info.get('regularMarketPrice', 0.0)
-
         hist = t.history(period="2d", auto_adjust=True)
-        if len(hist) >= 2:
-            daily_chg = (hist['Close'].iloc[-1] / hist['Close'].iloc[-2] - 1) * 100
-        else:
-            daily_chg = info.get('regularMarketChangePercent', 0.0)
-
+        daily_chg = ((hist['Close'].iloc[-1] / hist['Close'].iloc[-2] - 1) * 100) if len(hist) >= 2 else 0.0
         sector = info.get('sector', 'Unknown')
-
-        news_items = []
-        if hasattr(t, 'news') and t.news:
-            for item in t.news[:3]:
-                news_items.append({
-                    "title": item.get('title', ''),
-                    "publisher": item.get('publisher', '')
-                })
-
+        news = [{"title": n.get('title',''), "publisher": n.get('publisher','')} for n in (t.news or [])[:3]]
         return {
-            "current_price": round(float(current_price), 2) if current_price else 0.0,
-            "daily_chg_pct": round(float(daily_chg), 2) if daily_chg else 0.0,
+            "current_price": round(float(current_price), 2),
+            "daily_chg_pct": round(float(daily_chg), 2),
             "sector": sector,
-            "news": news_items
+            "news": news
         }
     except Exception as e:
         print(f"[WARN] {ticker_symbol}: {e}")
         return {"current_price": 0.0, "daily_chg_pct": 0.0, "sector": "Unknown", "news": []}
 
-
 def calculate_full_portfolio(portfolio_list, fx_rate):
-    rows = []
-    total_value_nzd = 0.0
-    total_cost_nzd = 0.0
-    urgent_alerts = []
+    rows, total_value, total_cost, urgent = [], 0.0, 0.0, []
     sector_breakdown = {}
 
     for h in portfolio_list:
-        ticker = h["ticker"]
-        shares = int(h["shares"])
-        buy_price = float(h["buy_price"])
-        name = h.get("name", ticker)
+        ticker, shares, buy_price = h["ticker"], int(h["shares"]), float(h["buy_price"])
         is_aud = ticker.endswith(".AX")
         fx = fx_rate if is_aud else 1.0
-
         snap = fetch_ticker_snapshot(ticker)
-        curr_price = snap["current_price"]
-        daily_chg = snap["daily_chg_pct"]
-        sector = snap["sector"]
 
-        current_value_nzd = shares * curr_price * fx
-        cost_basis_nzd = shares * buy_price * fx
-        pnl_nzd = current_value_nzd - cost_basis_nzd
-        pnl_pct = ((curr_price / buy_price) - 1) * 100 if buy_price > 0 else 0.0
+        curr_val = shares * snap["current_price"] * fx
+        cost_val = shares * buy_price * fx
+        pnl_pct = ((snap["current_price"] / buy_price - 1) * 100) if buy_price > 0 else 0
 
-        total_value_nzd += current_value_nzd
-        total_cost_nzd += cost_basis_nzd
-
-        if sector not in sector_breakdown:
-            sector_breakdown[sector] = 0.0
-        sector_breakdown[sector] += current_value_nzd
+        total_value += curr_val
+        total_cost += cost_val
+        sector_breakdown[snap["sector"]] = sector_breakdown.get(snap["sector"], 0) + curr_val
 
         rows.append({
-            "Ticker": ticker,
-            "Name": name,
-            "Shares": shares,
-            "Buy Price": round(buy_price, 2),
-            "Current Price": curr_price,
-            "Current Value (NZD)": round(current_value_nzd, 2),
-            "P&L (NZD)": round(pnl_nzd, 2),
+            "Ticker": ticker, "Name": h.get("name", ticker), "Shares": shares,
+            "Buy Price": buy_price, "Current Price": snap["current_price"],
+            "Current Value (NZD)": round(curr_val, 2),
+            "P&L (NZD)": round(curr_val - cost_val, 2),
             "P&L %": round(pnl_pct, 2),
-            "Daily Chg %": daily_chg,
-            "Sector": sector
+            "Daily Chg %": snap["daily_chg_pct"],
+            "Sector": snap["sector"]
         })
 
-        if daily_chg <= URGENT_THRESHOLD_PCT:
-            urgent_alerts.append(
-                f"**URGENT ALERT** — {ticker} ({name}) down {daily_chg:.2f}% today. "
-                "Review immediately or consider reducing/tightening stops."
-            )
+        if snap["daily_chg_pct"] <= URGENT_THRESHOLD_PCT:
+            urgent.append(f"**URGENT** {ticker} down {snap['daily_chg_pct']:.1f}% today")
 
     df = pd.DataFrame(rows)
-    total_pnl_nzd = total_value_nzd - total_cost_nzd
-    total_pnl_pct = (total_pnl_nzd / total_cost_nzd * 100) if total_cost_nzd > 0 else 0.0
-    sector_breakdown = dict(sorted(sector_breakdown.items(), key=lambda x: x[1], reverse=True))
+    total_pnl = total_value - total_cost
+    total_pnl_pct = (total_pnl / total_cost * 100) if total_cost > 0 else 0
+    return df, total_value, total_pnl, total_pnl_pct, urgent, dict(sorted(sector_breakdown.items(), key=lambda x: -x[1]))
 
-    return df, total_value_nzd, total_pnl_nzd, total_pnl_pct, urgent_alerts, sector_breakdown, total_cost_nzd
-
-
-def get_top_movers(ticker_list, period="1d", top_n=15):
+def get_top_movers(tickers, period="1d", top_n=10):
     try:
-        data = yf.download(ticker_list, period=period, progress=False, auto_adjust=True, threads=True)["Close"]
-        if data.empty or len(data) < 2:
-            return pd.DataFrame(columns=["Ticker", "% Change"])
-        pct = ((data.iloc[-1] / data.iloc[0]) - 1) * 100
-        top = pct.sort_values(ascending=False).head(top_n)
-        return pd.DataFrame({"Ticker": top.index, "% Change": top.values.round(2)})
-    except Exception as e:
-        print(f"[WARN] Movers {period}: {e}")
-        return pd.DataFrame(columns=["Ticker", "% Change"])
-
+        data = yf.download(tickers, period=period, progress=False, auto_adjust=True, threads=True)["Close"]
+        if data.empty or len(data) < 2: return pd.DataFrame()
+        pct = ((data.iloc[-1] / data.iloc[0] - 1) * 100).sort_values(ascending=False).head(top_n)
+        return pd.DataFrame({"Ticker": pct.index, "% Change": pct.values.round(2)})
+    except:
+        return pd.DataFrame()
 
 def is_trading_day_nz():
     try:
-        nz_tz = pytz.timezone('Pacific/Auckland')
-        now = datetime.now(nz_tz)
-        return now.weekday() < 5
+        return datetime.now(pytz.timezone('Pacific/Auckland')).weekday() < 5
     except:
         return datetime.now().weekday() < 5
 
-
-def is_within_trading_hours_nz(start_hour=6, end_hour=18):
+def is_within_trading_hours_nz(start=6, end=18):
     try:
-        nz_tz = pytz.timezone('Pacific/Auckland')
-        now = datetime.now(nz_tz)
-        return start_hour <= now.hour <= end_hour
+        return start <= datetime.now(pytz.timezone('Pacific/Auckland')).hour <= end
     except:
-        now = datetime.now()
-        return start_hour <= now.hour <= end_hour
+        return start <= datetime.now().hour <= end
 
-
-def send_portfolio_email(report_markdown, to_email=None):
-    if not EMAIL_ENABLED or not EMAIL_USER or not EMAIL_PASS:
-        print("[INFO] Email disabled or credentials missing.")
+# ============================================================
+# TELEGRAM
+# ============================================================
+def send_telegram(text):
+    if not SEND_TELEGRAM or not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        print("[INFO] Telegram disabled or credentials missing")
+        return False
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text[:4096], "parse_mode": "Markdown"}
+        r = requests.post(url, json=payload, timeout=15)
+        if r.status_code == 200:
+            print("[SUCCESS] Sent to Telegram")
+            return True
+        print(f"[ERROR] Telegram: {r.text}")
+        return False
+    except Exception as e:
+        print(f"[ERROR] Telegram failed: {e}")
         return False
 
+# ============================================================
+# EMAIL (Gmail)
+# ============================================================
+def send_email_report(subject, markdown_body, to_email=None):
+    if not SEND_EMAIL or not EMAIL_USER or not EMAIL_PASS:
+        print("[INFO] Email disabled or credentials missing")
+        return False
     recipient = to_email or EMAIL_TO
-    if not recipient:
-        print("[WARN] No recipient email.")
-        return False
-
     try:
         msg = MIMEMultipart("alternative")
-        today_str = datetime.now().strftime("%d %b %Y")
-        msg["Subject"] = f"{EMAIL_SUBJECT_PREFIX} — {today_str}"
+        msg["Subject"] = subject
         msg["From"] = EMAIL_USER
         msg["To"] = recipient
 
-        text = "Your portfolio report is ready (see HTML version below)."
-
-        html = f"""<!DOCTYPE html>
-<html><body style="font-family: system-ui, -apple-system, sans-serif; max-width: 980px; margin: auto; padding: 20px; background:#f8f9fa;">
-<div style="background:white; border-radius:12px; box-shadow:0 4px 20px rgba(0,0,0,0.08); padding:30px;">
-<h1 style="color:#1a73e8; margin-top:0;">📈 NZX & ASX Portfolio Report</h1>
-<p style="color:#5f6368;">{today_str} NZST • Automated hourly during trading hours</p>
-<div style="background:#f1f3f4; border-radius:8px; padding:20px; margin:20px 0; font-family:ui-monospace,monospace; white-space:pre-wrap; font-size:0.875rem; line-height:1.5; overflow-x:auto;">
-{report_markdown}
-</div>
-<p style="font-size:0.85rem; color:#70757a;">Generated by your NZX/ASX Portfolio Monitor • SuperGrok</p>
+        html = f"""<html><body style="font-family:system-ui;max-width:980px;margin:auto;padding:20px;background:#f8f9fa">
+<div style="background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.08);padding:30px">
+<h1 style="color:#1a73e8">📈 NZX & ASX Portfolio Report</h1>
+<pre style="white-space:pre-wrap;background:#f1f3f4;padding:20px;border-radius:8px;font-size:0.9rem;line-height:1.5">{markdown_body}</pre>
 </div></body></html>"""
 
-        msg.attach(MIMEText(text, "plain"))
+        msg.attach(MIMEText("See HTML version", "plain"))
         msg.attach(MIMEText(html, "html"))
 
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as server:
             server.login(EMAIL_USER, EMAIL_PASS)
             server.sendmail(EMAIL_USER, recipient.split(","), msg.as_string())
-
         print(f"[SUCCESS] Email sent to {recipient}")
         return True
     except Exception as e:
         print(f"[ERROR] Email failed: {e}")
         return False
 
+# ============================================================
+# xAI GROK ENHANCEMENT (Optional)
+# ============================================================
+def enhance_with_grok(portfolio_df, total_value, total_pnl_pct):
+    if not XAI_API_KEY:
+        return "Grok analysis disabled (no XAI_API_KEY)."
 
-def collect_recent_news(portfolio_list):
-    all_news = []
-    for h in portfolio_list:
-        snap = fetch_ticker_snapshot(h["ticker"])
-        for n in snap.get("news", []):
-            all_news.append({"ticker": h["ticker"], "title": n.get("title", ""), "publisher": n.get("publisher", "")})
+    prompt = f"""You are SuperGrok, elite NZ/AU stock trader.
+Portfolio Value: ${total_value:,.0f} NZD | Total P&L: {total_pnl_pct:+.2f}%
 
-    seen = set()
-    unique = []
-    for item in all_news:
-        if item["title"] and item["title"] not in seen:
-            seen.add(item["title"])
-            unique.append(item)
-    return unique[:6]
+Holdings:
+{portfolio_df[['Ticker','P&L %','Daily Chg %']].to_string(index=False)}
 
+Write a concise institutional update with these headings:
+## Holdings Insights & Recommendations
+## 7-Day Outlook & Conviction Levels
+## Key Risks & Opportunities
+## High-Conviction Buy Ideas (NZX/ASX)
 
-def build_markdown_report():
-    print("Fetching live prices and market data...")
+Be direct and actionable. Max 550 words."""
+
+    try:
+        headers = {"Authorization": f"Bearer {XAI_API_KEY}", "Content-Type": "application/json"}
+        payload = {
+            "model": "grok-3-latest",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 1100,
+            "temperature": 0.3
+        }
+        r = requests.post("https://api.x.ai/v1/chat/completions", headers=headers, json=payload, timeout=50)
+        if r.status_code == 200:
+            return r.json()["choices"][0]["message"]["content"]
+        return f"Grok error: {r.text}"
+    except Exception as e:
+        return f"Grok failed: {e}"
+
+# ============================================================
+# MAIN REPORT
+# ============================================================
+def build_report():
+    print("Fetching market data...")
     fx = get_aud_nzd_rate()
-    ts = get_nz_timestamp()
+    df, total_val, total_pnl, total_pnl_pct, alerts, sectors = calculate_full_portfolio(PORTFOLIO, fx)
 
-    df, total_val, total_pnl, total_pnl_pct, alerts, sector_dict, total_cost = calculate_full_portfolio(PORTFOLIO, fx)
+    movers_24h = get_top_movers(ASX_WATCHLIST + NZX_WATCHLIST, "1d", 8)
 
-    print("Calculating top movers...")
-    movers_24h_nzx = get_top_movers(NZX_WATCHLIST, "1d")
-    movers_24h_asx = get_top_movers(ASX_WATCHLIST, "1d")
-    movers_7d_nzx  = get_top_movers(NZX_WATCHLIST, "7d")
-    movers_7d_asx  = get_top_movers(ASX_WATCHLIST, "7d")
-    movers_1m_nzx  = get_top_movers(NZX_WATCHLIST, "1mo")
-    movers_1m_asx  = get_top_movers(ASX_WATCHLIST, "1mo")
+    md = f"""# NZX & ASX Portfolio Report — {get_nz_timestamp()}
 
-    recent_news = collect_recent_news(PORTFOLIO)
+**Total Value:** ${total_val:,.0f} NZD   |   **P&L:** {total_pnl_pct:+.2f}%
+**FX AUD/NZD:** {fx}
 
-    # Build the full report (same structure as before)
-    md = f"""# NZX & ASX Portfolio Report — SuperGrok Institutional Briefing
-**Generated:** {ts}  
-**Data:** Latest available (Yahoo Finance) | **AUD/NZD:** {fx}
-
+## Portfolio Snapshot
+{df.to_markdown(index=False)}
 """
 
-    # 1. Valuation + Alerts
-    md += "## 1. Live Prices, Valuation & Urgent Alerts\n\n"
-    md += df.to_markdown(index=False) + "\n\n"
-    md += f"**Total Portfolio Value (NZD):** ${total_val:,.2f}\n"
-    md += f"**Total Unrealized P&L (NZD):** ${total_pnl:,.2f} ({total_pnl_pct:+.2f}%)\n\n"
-
     if alerts:
-        md += "### URGENT ALERTS\n" + "\n".join([f"- {a}" for a in alerts]) + "\n\n"
+        md += "\n## URGENT ALERTS\n" + "\n".join([f"- {a}" for a in alerts]) + "\n"
+
+    if USE_GROK_ANALYSIS and XAI_API_KEY:
+        print("Calling Grok for analysis...")
+        grok_text = enhance_with_grok(df, total_val, total_pnl_pct)
+        md += "\n" + grok_text
     else:
-        md += "No urgent alerts triggered.\n\n"
+        md += """
+## Holdings Insights & Recommendations
+( Set USE_GROK_ANALYSIS=true + XAI_API_KEY to enable AI analysis )
 
-    # 2. News
-    md += "## 2. Key NZX & ASX News & Events\n\n"
-    if recent_news:
-        for n in recent_news:
-            md += f"- **{n['ticker']}**: {n['title']} ({n['publisher']})\n"
-    else:
-        md += "No recent news for holdings.\n"
-    md += "\n"
+## 7-Day Outlook
+Medium-High conviction. Watch economic data and company updates.
 
-    # 3. Top Movers
-    md += "## 3. Top Movers Reports\n\n"
-    for title, mdf in [
-        ("NZX Top Movers – Last 24 Hours", movers_24h_nzx),
-        ("ASX Top Movers – Last 24 Hours", movers_24h_asx),
-        ("NZX Top Movers – Past 7 Days", movers_7d_nzx),
-        ("ASX Top Movers – Past 7 Days", movers_7d_asx),
-        ("NZX Top Movers – Past 1 Month", movers_1m_nzx),
-        ("ASX Top Movers – Past 1 Month", movers_1m_asx),
-    ]:
-        md += f"### {title}\n"
-        md += mdf.to_markdown(index=False) if not mdf.empty else "Data unavailable.\n"
-        md += "\n"
+## Key Risks & Opportunities
+- Risks: Sector concentration, macro moves.
+- Opportunities: Quality dips in current holdings.
 
-    # 4-8. Institutional Briefing (abbreviated but complete structure)
-    md += "## 4. Ultra-Advanced Institutional Portfolio Briefing\n\n"
-    md += "### 1. Portfolio Snapshot & Daily Performance\n"
-    md += f"- **Total Value:** ${total_val:,.2f} NZD | **P&L:** ${total_pnl:,.2f} ({total_pnl_pct:+.2f}%)\n\n"
+## Action Items
+Review positions down >5% today.
+"""
 
-    md += "### 2. Sector Allocation Review\n"
-    for sec, val in sector_dict.items():
-        pct = (val / total_val * 100) if total_val > 0 else 0
-        md += f"- {sec}: ${val:,.0f} ({pct:.1f}%)\n"
-    md += "\n"
-
-    md += "### 3. Market Regime & Key Drivers\n"
-    md += "RBA/RBNZ policy, China demand, commodity prices, and AUD/NZD cross remain the dominant macro drivers. Earnings season and company-specific catalysts are the main stock-level movers.\n\n"
-
-    md += "### 4. Holdings Insights & Recommendations\n"
-    for _, r in df.iterrows():
-        rec = "Hold"
-        if r["P&L %"] > 25: rec = "Reduce / Trim on strength"
-        elif r["Daily Chg %"] < -4: rec = "Watch closely"
-        md += f"**{r['Ticker']}**: {r['P&L %']:+.1f}% | Daily {r['Daily Chg %']:+.1f}% → **{rec}**\n"
-    md += "\n"
-
-    md += "### 5. 7-Day Outlook & Conviction Levels\n"
-    md += "**Overall Conviction: Medium-High**. Watch for follow-through on recent movers and any company updates.\n\n"
-
-    md += "### 6. Risk Management & Portfolio Health\n"
-    md += f"- {len(df)} holdings across multiple sectors. Good liquidity. Monitor concentration in any single name >25-30%.\n\n"
-
-    md += "### 7. Key Risks & Opportunities\n"
-    md += "- Risks: Sector concentration, AUD strength, global growth slowdown.\n"
-    md += "- Opportunities: Quality dips in current holdings or new high-conviction ideas (see Section 8).\n\n"
-
-    md += "### 8. Insights and Recommendations on which to BUY\n"
-    md += "Run full SuperGrok analysis with this data for specific 3-5 high-conviction ideas with entry/target/stop levels.\n\n"
-
-    md += "## 5. Broader Market Projections\n"
-    md += "Focus on liquid healthcare, technology, logistics and infrastructure names with strong moats and visible catalysts.\n\n"
-
-    md += "## 6. Strategic 7-Day Action Plan\n"
-    md += "**Daily**: Check for >4-5% moves. Review announcements.\n"
-    md += "**This week**: Watch economic data releases and earnings updates. Rebalance only if allocation rules breached.\n\n"
-
-    md += "---\n**Key Items to Watch**: Price action on big movers today + any company-specific news.\n"
-    md += "*For deeper analysis paste this report into SuperGrok.*"
-
-    return md, df
-
+    md += "\n---\n*Automated • Data: Yahoo Finance*"
+    return md, df, total_val, total_pnl_pct
 
 # ============================================================
 # MAIN
 # ============================================================
 if __name__ == "__main__":
-    # Trading hours guard (used by GitHub Actions)
-    if not is_trading_day_nz():
-        print("Weekend in NZ time. Exiting.")
+    if not is_trading_day_nz() or not is_within_trading_hours_nz(6, 18):
+        print("Outside trading hours (6am-6pm NZST Mon-Fri). Exiting.")
         exit(0)
 
-    if not is_within_trading_hours_nz(6, 18):
-        print("Outside 6am–6pm NZST. Exiting.")
-        exit(0)
+    print("=== Generating NZX/ASX Portfolio Report ===")
+    report_md, df, total_val, pnl_pct = build_report()
 
-    print("=== NZX/ASX Trading Hours — Generating Hourly Report ===")
-    report_md, valuation_df = build_markdown_report()
-
-    print("\n" + "="*70)
-    print(report_md)
-    print("="*70 + "\n")
-
-    os.makedirs("/home/workdir/artifacts", exist_ok=True)
-    with open("/home/workdir/artifacts/portfolio_report.md", "w", encoding="utf-8") as f:
+    os.makedirs("artifacts", exist_ok=True)
+    with open("artifacts/portfolio_report.md", "w", encoding="utf-8") as f:
         f.write(report_md)
-    valuation_df.to_csv("/home/workdir/artifacts/portfolio_valuation.csv", index=False)
+    df.to_csv("artifacts/portfolio_valuation.csv", index=False)
 
-    if EMAIL_ENABLED:
-        send_portfolio_email(report_md)
+    subject = f"NZX/ASX Portfolio • {datetime.now().strftime('%d %b')} | P&L {pnl_pct:+.1f}%"
 
-    print("\n✅ Done. Report saved to artifacts/ folder.")
-    if EMAIL_ENABLED:
-        print("   Email delivery attempted.")
+    if SEND_EMAIL:
+        send_email_report(subject, report_md)
+
+    if SEND_TELEGRAM:
+        short_text = f"📈 *Portfolio Update*\nValue: ${total_val:,.0f} NZD\nP&L: {pnl_pct:+.2f}%\n\n{report_md[:2200]}"
+        send_telegram(short_text)
+
+    print("\n✅ Report complete. Notifications sent where enabled.")
