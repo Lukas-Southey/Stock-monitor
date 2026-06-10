@@ -2,16 +2,11 @@ name: NZX-ASX Portfolio Hourly Report (Trading Hours)
 
 on:
   schedule:
-    # Run every hour on weekdays (UTC). 
-    # The Python script itself checks NZ time (6am-6pm) and exits early outside the window.
-    # This covers roughly 6am-6pm NZST (UTC+12) during standard time.
     - cron: '0 * * * 1-5'
-
-  workflow_dispatch:   # Allow manual trigger from GitHub UI
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
   send-portfolio-report:
@@ -25,7 +20,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          # cache: 'pip' removed — not needed and causes error without requirements.txt
 
       - name: Install dependencies
         run: |
