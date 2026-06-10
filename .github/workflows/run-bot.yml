@@ -1,36 +1,47 @@
-name: run-monitor
+name: NZX-ASX Portfolio Hourly Report (Trading Hours)
 
 on:
   schedule:
-    # Runs every hour from 6:00 AM to 6:00 PM NZST (UTC+12), Monday to Friday
-    - cron: '0 18,19,20,21,22,23,0,1,2,3,4,5,6 * * 1-5'
-  workflow_dispatch:   # Allows manual trigger from GitHub
+    # Run every hour on weekdays (UTC). 
+    # The Python script itself checks NZ time (6am-6pm) and exits early outside the window.
+    # This covers roughly 6am-6pm NZST (UTC+12) during standard time.
+    - cron: '0 * * * 1-5'
+
+  workflow_dispatch:   # Allow manual trigger from GitHub UI
 
 jobs:
-  run:
+  send-portfolio-report:
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install yfinance pandas feedparser requests openai
+          pip install yfinance pandas pytz
 
-      - name: Run Grok Stock Monitor
+      - name: Run Portfolio Monitor (email enabled)
         env:
-          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
-          GMAIL_EMAIL: ${{ secrets.GMAIL_EMAIL }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          CHAT_ID: ${{ secrets.CHAT_ID }}
-        run: python stock_monitor.py
+          SEND_EMAIL: "true"
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: |
+          python nzx_asx_portfolio_monitor.py
+
+      - name: Upload report artifacts (optional)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: portfolio-report
+          path: |
+            artifacts/portfolio_report.md
+            artifacts/portfolio_valuation.csv
+          retention-days: 7
