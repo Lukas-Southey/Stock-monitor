@@ -2,15 +2,16 @@ name: NZX-ASX Portfolio Hourly Report (Trading Hours)
 
 on:
   schedule:
+    # Run every hour on weekdays (UTC). 
+    # The Python script itself checks NZ time (6am-6pm) and exits early outside the window.
+    # This covers roughly 6am-6pm NZST (UTC+12) during standard time.
     - cron: '0 * * * 1-5'
-  workflow_dispatch:
+
+  workflow_dispatch:   # Allow manual trigger from GitHub UI
 
 jobs:
   send-portfolio-report:
     runs-on: ubuntu-latest
-
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true     # ← Add this line
 
     steps:
       - name: Checkout repository
@@ -20,16 +21,17 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          # cache: 'pip' removed — not needed and causes error without requirements.txt
 
       - name: Install dependencies
         run: |
-          pip install yfinance pandas pytz requests
+          pip install yfinance pandas pytz
 
-      - name: Run Portfolio Monitor (email + Telegram + Grok)
+      - name: Run Portfolio Monitor (email + Telegram + optional Grok)
         env:
           SEND_EMAIL: "true"
           SEND_TELEGRAM: "true"
-          USE_GROK_ANALYSIS: "true"
+          USE_GROK_ANALYSIS: "true"           # Grok AI analysis enabled by default
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
@@ -39,9 +41,9 @@ jobs:
         run: |
           python nzx_asx_portfolio_monitor.py
 
-      - name: Upload report artifacts (optional)
+      - name: Upload report artifacts (only if files exist)
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && hashFiles('artifacts/portfolio_report.md') != ''
         with:
           name: portfolio-report
           path: |
