@@ -1,0 +1,47 @@
+name: NZX-ASX Portfolio Hourly Report (Trading Hours)
+
+on:
+  schedule:
+    # Run every hour on weekdays (UTC). 
+    # The Python script itself checks NZ time (6am-6pm) and exits early outside the window.
+    # This covers roughly 6am-6pm NZST (UTC+12) during standard time.
+    - cron: '0 * * * 1-5'
+
+  workflow_dispatch:   # Allow manual trigger from GitHub UI
+
+jobs:
+  send-portfolio-report:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          # cache: 'pip' removed — not needed and causes error without requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install yfinance pandas pytz
+
+      - name: Run Portfolio Monitor (email enabled)
+        env:
+          SEND_EMAIL: "true"
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: |
+          python nzx_asx_portfolio_monitor.py
+
+      - name: Upload report artifacts (optional)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: portfolio-report
+          path: |
+            artifacts/portfolio_report.md
+            artifacts/portfolio_valuation.csv
+          retention-days: 7
