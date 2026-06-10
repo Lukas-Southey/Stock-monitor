@@ -27,12 +27,17 @@ jobs:
         run: |
           pip install yfinance pandas pytz
 
-      - name: Run Portfolio Monitor (email enabled)
+      - name: Run Portfolio Monitor (email + Telegram + optional Grok)
         env:
           SEND_EMAIL: "true"
+          SEND_TELEGRAM: "true"
+          USE_GROK_ANALYSIS: "true"          # Change to "true" to enable xAI Grok analysis
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
         run: |
           python nzx_asx_portfolio_monitor.py
 
