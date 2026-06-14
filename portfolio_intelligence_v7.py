@@ -421,3 +421,7 @@ if __name__ == "__main__":
     send_telegram(total_val, pnl_pct)
 
     print("\n🚀 Portfolio Intelligence complete. Check artifacts/ and your notifications.")
+
+
+USE_GROK_ANALYSIS=True
+"""
